@@ -5,6 +5,7 @@ import _ from 'lodash';
 const pluginName = ["unfinished-business", "Unfinished Business"]
 const markers = ['"TODO" "LATER" "DOING" "NOW"','"LATER" "NOW"','"TODO" "DOING"']
 const sortList = ["Alphabetical", "by Marker then Priority", "by Priority then Marker", "Unsorted"]
+const scheduleChoices = ["All Tasks", "Unscheduled Tasks", "Unscheduled and Past-Schedule Tasks"]
 export const settingsTemplate: SettingSchemaDesc[] = [{
   key: "defaultTag",
   type: 'string',
@@ -27,6 +28,14 @@ export const settingsTemplate: SettingSchemaDesc[] = [{
   default: sortList[2],
   title: "How to sort movable tasks?",
   description: "Sort order: Alphabetical, by Marker then Priority, by Priority then Marker, or None",
+},{
+  key: "moveScheduled",
+  type: 'enum',
+  enumChoices: scheduleChoices,
+  enumPicker: 'radio',
+  default: scheduleChoices[0],
+  title: "Whether to move scheduled tasks?",
+  description: "Move all tasks, just unscheduled tasks, or unscheduled and past-schedule tasks",
 }
 ]
 logseq.useSettingsSchema(settingsTemplate);
@@ -43,6 +52,31 @@ async function parseQuery(queryTag, omniOK){
 ` : ""
   const omniSearch = (omniOK) ? "" : `[?p :block/journal? true] [?p :block/journal-day ${journalYesterday()}]`
   if (queryTag === "imsure" && omniOK) searchTag = ""
+
+  if(logseq.settings.moveScheduled === scheduleChoices[1]) omniSearch += `(not [?b :block/scheduled])`
+  if(logseq.settings.moveScheduled === scheduleChoices[2]) {
+    if(omniOK){
+      omniSearch = `
+      (or 
+        (not [?b :block/scheduled])
+        (and 
+          [?b :block/scheduled? true]
+          (< (get-in ?b [:block/scheduled]) (:today)
+        )
+      )`
+    } else {
+      omniSearch = `
+      [?p :block/journal? true]
+      (or 
+        (and [?p :block/journal-day ${journalYesterday()}] (not [?b :block/scheduled]))
+        (and 
+          [?b :block/scheduled? true]
+          (< (get-in ?b [:block/scheduled]) (:today)
+        )
+      )`
+    }
+  }
+  
 
   // https://stackoverflow.com/questions/19156148/i-want-to-remove-double-quotes-from-a-string
   const query = `[:find (pull ?b [*])
